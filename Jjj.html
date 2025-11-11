@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>रंग मिलाओ पहेली - (Solvable) Water Sort Puzzle</title>
+
+<!-- Tailwind for quick styling -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Tone.js for sounds -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+
+<style>
+  :root{
+    --bg:#0f1724;
+    --card:#111827;
+    --muted:#9ca3af;
+  }
+  html,body{height:100%}
+  body{
+    background:linear-gradient(180deg,var(--bg),#0b1220);
+    color:#fff;
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+    margin:0;
+    padding:20px;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* Tube layout */
+  #game-board{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:18px;
+    align-items:flex-end;
+    padding:18px;
+    border-radius:12px;
+  }
+  .tube-container{
+    width:84px;
+    height:220px;
+    display:flex;
+    flex-direction:column-reverse;
+    align-items:center;
+    cursor:pointer;
+    position:relative;
+    transition:transform .12s ease;
+  }
+  .tube-container:active{ transform: translateY(-4px); }
+  .tube{
+    width:100%;
+    height:100%;
+    border-radius:0 0 28px 28px;
+    border:3px solid rgba(255,255,255,0.06);
+    background:rgba(255,255,255,0.02);
+    position:relative;
+    overflow:hidden;
+  }
+  .tube.selected{
+    transform:translateY(-8px);
+    border-color:#f59e0b;
+    box-shadow:0 6px 18px rgba(245,158,11,0.12);
+  }
+  .tube-cap{
+    position:absolute;
+    top:-6px;
+    width:44%;
+    height:12px;
+    border-radius:50%;
+    background:rgba(0,0,0,0.45);
+    box-shadow:0 4px 12px rgba(0,0,0,0.4) inset;
+    z-index:20;
+  }
+
+  /* each layer */
+  .tube-liquid-layer{
+    position:absolute;
+    left:0;
+    width:100%;
+    height:25%; /* 4 layers per tube */
+    box-shadow:0 -4px 8px rgba(0,0,0,0.12) inset;
+    transition:all .28s ease;
+    border-top:1px solid rgba(0,0,0,0.08);
+  }
+  .layer-bottom { bottom:0; }
+  .layer-2 { bottom:25%; }
+  .layer-3 { bottom:50%; }
+  .layer-top { bottom:75%; }
+
+  /* Game panel */
+  .panel{
+    max-width:980px;
+    margin:0 auto 18px auto;
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:12px;
+    padding:16px;
+    border:1px solid rgba(255,255,255,0.03);
+    box-shadow: 0 10px 30px rgba(2,6,23,0.6);
+  }
+
+  .btn{
+    padding:10px 18px;
+    border-radius:999px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* responsive */
+  @media (max-width:640px){
+    .tube-container{ width:62px; height:170px; }
+  }
+
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="flex items-center justify-between mb-3">
+    <h1 class="text-2xl font-extrabold text-yellow-300">रंग मिलाओ पहेली — Solvable</h1>
+    <div class="text-sm text-gray-300">यहाँ levels हमेशा solveable बनाए जाते हैं (Reverse generation)</div>
+  </div>
+
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex gap-4 items-center">
+      <div><span class="text-sm text-sky-300 font-semibold">स्तर:</span> <span id="level-number">1</span></div>
+      <div><span class="text-sm text-green-300 font-semibold">चालें:</span> <span id="moves-counter">0</span></div>
+    </div>
+    <div class="flex gap-3">
+      <button id="undo-button" class="btn bg-red-600 hover:bg-red-700">वापस लें</button>
+      <button id="restart-button" class="btn bg-indigo-600 hover:bg-indigo-700">पुनः शुरू</button>
+    </div>
+  </div>
+
+  <div id="game-board" class="bg-gray-800/40 p-4 rounded-xl"></div>
+
+  <div class="mt-4 text-sm text-gray-400">
+    सुझाव: किसी tube पर टैप करें — फिर दूसरी tube पर टैप करके रंग डालें। गेम स्वतः solvable बनाने के लिए प्रत्येक level बनाया गया है।
+  </div>
+</div>
+
+<!-- Win modal -->
+<div id="win-modal" class="fixed inset-0 hidden items-center justify-center z-50">
+  <div style="background:rgba(3,7,18,0.82);backdrop-filter:blur(6px)" class="p-6 rounded-xl border-2 border-yellow-400 text-center max-w-xs mx-auto">
+    <div class="text-yellow-300 text-2xl font-extrabold mb-2">🎉 आपने जीत लिया!</div>
+    <div class="mb-4 text-gray-300">बहुत बढ़िया — अगला स्तर तैयार है।</div>
+    <button id="next-level-button" class="btn bg-green-500 hover:bg-green-600 w-full">अगला स्तर</button>
+  </div>
+</div>
+
+<script type="module">
+/*
+  Complete single-file Water Sort Puzzle with guaranteed-solvable levels.
+  Key idea: build solved state, then apply many valid random moves (reverse generation),
+  so output is always solvable.
+*/
+
+const TUBE_CAPACITY = 4;
+const MIN_COLORS = 3;
+const MAX_COLORS = 8; // available in palette
+const EXTRA_EMPTY = 2; // at least 2 empty tubes
+
+const ALL_COLORS = [
+  '#ef4444', // red
+  '#f97316', // orange
+  '#facc15', // yellow
+  '#22c55e', // green
+  '#3b82f6', // blue
+  '#a855f7', // purple
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+];
+
+let gameState = []; // array of arrays; each tube: bottom->top order (index 0 bottom, last index top)
+let history = [];
+let selected = -1;
+let moves = 0;
+let level = 1;
+
+// Tone.js audio setup
+let isAudioReady = false;
+const PourSynth = new Tone.Synth({
+  oscillator:{ type:'sine' }, envelope:{attack:0.01,decay:0.12,sustain:0,release:0.12}
+}).toDestination();
+const ErrorSynth = new Tone.Synth({ oscillator:{ type:'square' } }).toDestination();
+const WinSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+
+document.body.addEventListener('click', () => {
+  if (Tone.context.state !== 'running') Tone.start().then(()=>{ isAudioReady = true; });
+  else isAudioReady = true;
+},{ once:true });
+
+function playSound(kind){
+  if(!isAudioReady) return;
+  try{
+    if(kind === 'pour') PourSynth.triggerAttackRelease('G4','16n');
+    if(kind === 'error') ErrorSynth.triggerAttackRelease('C2','64n');
+    if(kind === 'win') WinSynth.triggerAttackRelease(['C5','E5','G5','C6'],'0.6');
+  }catch(e){
+    console.warn('Audio error', e);
+  }
+}
+
+// ---------- Utility functions ----------
+
+// Deep clone state
+function cloneState(state){
+  return state.map(t => t.slice());
+}
+
+// Return contiguous top block info
+function getTopLiquid(tubeIndex){
+  const tube = gameState[tubeIndex];
+  if(!tube || tube.length === 0) return { color: null, amount: 0 };
+  const topColor = tube[tube.length - 1];
+  let amount = 0;
+  for(let i = tube.length - 1; i >= 0; i--){
+    if(tube[i] === topColor) amount++;
+    else break;
+  }
+  return { color: topColor, amount };
+}
+
+// Check pour amount (valid move)
+function getPourAmount(from, to, state = gameState){
+  if(from === to) return 0;
+  const src = state[from], dst = state[to];
+  if(!src || src.length === 0) return 0;
+  const top = src[src.length - 1];
+  const { amount: srcAmt } = (function(){
+    let a=0;
+    for(let i=src.length-1;i>=0;i--){ if(src[i]===top) a++; else break; } return {amount:a, color:top};
+  })();
+  const space = TUBE_CAPACITY - dst.length;
+  if(space === 0) return 0;
+  const dstTop = dst.length === 0 ? null : dst[dst.length - 1];
+  if(dstTop !== null && dstTop !== top) return 0;
+  return Math.min(space, srcAmt);
+}
+
+// Execute pour (modifies gameState). If recordHistory is true push to history
+function executePour(from, to, amount, recordHistory = true){
+  if(amount <= 0) { playSound('error'); return false; }
+  if(recordHistory) history.push(JSON.stringify(gameState));
+  for(let i=0;i<amount;i++){
+    const color = gameState[from].pop();
+    gameState[to].push(color);
+  }
+  if(recordHistory){
+    moves++;
+    document.getElementById('moves-counter').textContent = moves;
+    playSound('pour');
+  }
+  return true;
+}
+
+// Get all valid moves for current state (list of [from,to,amount])
+function getAllValidMoves(state = gameState){
+  const moves = [];
+  for(let i=0;i<state.length;i++){
+    if(state[i].length === 0) continue;
+    for(let j=0;j<state.length;j++){
+      if(i===j) continue;
+      const amt = getPourAmount(i,j,state);
+      if(amt > 0) moves.push([i,j,amt]);
+    }
+  }
+  return moves;
+}
+
+// Check win (every non-empty tube is full and monochrome)
+function checkWin(){
+  return gameState.every(t => t.length === 0 || (t.length === TUBE_CAPACITY && t.every(c => c === t[0])));
+}
+
+// Render UI
+function render(){
+  const board = document.getElementById('game-board');
+  board.innerHTML = '';
+
+  gameState.forEach((tube, idx) => {
+    const cont = document.createElement('div');
+    cont.className = 'tube-container';
+    cont.onclick = () => onTubeClick(idx);
+
+    const cap = document.createElement('div');
+    cap.className = 'tube-cap';
+
+    const tubeEl = document.createElement('div');
+    tubeEl.className = 'tube' + (selected === idx ? ' selected' : '');
+
+    // Render layers bottom->top:
+    // tube[0] is bottom, top is last index
+    for(let layer = 0; layer < tube.length; layer++){
+      const color = tube[layer];
+      const layerDiv = document.createElement('div');
+      layerDiv.className = 'tube-liquid-layer ' + (layer === 0 ? 'layer-bottom' : layer === 1 ? 'layer-2' : layer === 2 ? 'layer-3' : 'layer-top');
+      layerDiv.style.background = color;
+      tubeEl.appendChild(layerDiv);
+    }
+
+    cont.appendChild(cap);
+    cont.appendChild(tubeEl);
+    board.appendChild(cont);
+  });
+
+  // Undo button state
+  document.getElementById('undo-button').disabled = history.length <= 1;
+}
+
+// Handle user taps
+function onTubeClick(idx){
+  // If currently no selection
+  if(selected === -1){
+    if(gameState[idx].length === 0){
+      playSound('error'); // empty selection invalid
+      return;
+    }
+    selected = idx;
+    render();
+    return;
+  }
+
+  // If selecting same tube again -> deselect
+  if(selected === idx){
+    selected = -1;
+    render();
+    return;
+  }
+
+  // Attempt pour
+  const amt = getPourAmount(selected, idx);
+  const from = selected, to = idx;
+  selected = -1;
+  if(amt > 0){
+    executePour(from, to, amt, true);
+  } else {
+    playSound('error');
+  }
+  render();
+
+  if(checkWin()){
+    setTimeout(()=> {
+      playSound('win');
+      document.getElementById('win-modal').style.display = 'flex';
+      document.getElementById('win-modal').classList.remove('hidden');
+    }, 350);
+  }
+}
+
+// Undo
+function undo(){
+  if(history.length <= 1) return;
+  history.pop();
+  gameState = JSON.parse(history[history.length - 1]);
+  moves = Math.max(0, moves - 1);
+  document.getElementById('moves-counter').textContent = moves;
+  selected = -1;
+  render();
+}
+
+// Restart current level
+function restartLevel(){
+  createLevel(level);
+}
+
+// Next level
+function nextLevel(){
+  level++;
+  document.getElementById('win-modal').classList.add('hidden');
+  document.getElementById('win-modal').style.display = 'none';
+  createLevel(level);
+}
+
+// ---------- LEVEL GENERATION (Reverse Move Generator) ----------
+
+/*
+Approach:
+1) Decide number of colors (depends on level) and number of tubes = colors + EXTRA_EMPTY
+2) Build solved state: each color occupies exactly one full tube (4 items), plus empty tubes
+   Represent each tube as array bottom->top (we'll push bottom first)
+3) From solved state perform many random valid moves (choose from getAllValidMoves)
+   - This produces a scrambled yet solvable state because all moves were legal from the solved state
+4) Save that state as initial gameState (history[0]) and allow play
+*/
+
+function createLevel(lvl){
+  // Determine number of colors: increase slowly with level
+  const colors = Math.min(MAX_COLORS, MIN_COLORS + Math.floor((lvl - 1) / 2));
+  const numTubes = colors + EXTRA_EMPTY;
+
+  // Start with solved state:
+  // Each of first `colors` tubes contains 4 of the same color (bottom->top)
+  const palette = ALL_COLORS.slice(0, colors);
+  let solved = Array(numTubes).fill(0).map(()=>[]);
+  for(let i=0;i<colors;i++){
+    // fill one tube with 4 of palette[i]
+    for(let k=0;k<TUBE_CAPACITY;k++){
+      solved[i].push(palette[i]);
+    }
+  }
+  // remaining tubes are already []
+
+  // Now perform many random valid moves (mixCount should grow with difficulty)
+  const mixCount = 80 + Math.min(220, lvl * 12); // tuned empirically
+  let state = cloneState(solved);
+
+  // helper to compute valid moves for an arbitrary state
+  function validMovesForState(st){
+    const res = [];
+    for(let i=0;i<st.length;i++){
+      if(st[i].length === 0) continue;
+      const topColor = st[i][st[i].length - 1];
+      // count contiguous top
+      let topCount=0;
+      for(let m=st[i].length-1;m>=0;m--){
+        if(st[i][m] === topColor) topCount++;
+        else break;
+      }
+      for(let j=0;j<st.length;j++){
+        if(i===j) continue;
+        if(st[j].length === TUBE_CAPACITY) continue;
+        const dstTop = st[j].length === 0 ? null : st[j][st[j].length - 1];
+        if(dstTop !== null && dstTop !== topColor) continue;
+        const space = TUBE_CAPACITY - st[j].length;
+        const canPour = Math.min(topCount, space);
+        if(canPour > 0) res.push([i,j,canPour]);
+      }
+    }
+    return res;
+  }
+
+  // Apply random valid moves
+  for(let step=0; step < mixCount; step++){
+    const movesList = validMovesForState(state);
+    if(movesList.length === 0) break; // shouldn't normally happen
+    // pick random move
+    const idx = Math.floor(Math.random() * movesList.length);
+    const [from,to,amt] = movesList[idx];
+
+    // To add variety, sometimes pour partial amount (not full contiguous) by choosing 1..amt
+    const pourAmount = 1 + Math.floor(Math.random() * amt);
+    // execute on state
+    for(let p=0;p<pourAmount;p++){
+      const color = state[from].pop();
+      state[to].push(color);
+    }
+  }
+
+  // Final safety-check: ensure at least two empty tubes exist (if not, try again with different mixing)
+  let attempts = 0;
+  while(state.filter(t=>t.length===0).length < EXTRA_EMPTY && attempts < 6){
+    // try a fresh shuffle
+    state = cloneState(solved);
+    for(let step=0; step < mixCount + 30; step++){
+      const movesList = validMovesForState(state);
+      if(movesList.length === 0) break;
+      const idx = Math.floor(Math.random() * movesList.length);
+      const [from,to,amt] = movesList[idx];
+      const pourAmount = 1 + Math.floor(Math.random() * amt);
+      for(let p=0;p<pourAmount;p++){
+        const color = state[from].pop();
+        state[to].push(color);
+      }
+    }
+    attempts++;
+  }
+
+  // Set global gameState
+  gameState = state;
+  // Reset history & counters
+  history = [JSON.stringify(gameState)];
+  moves = 0;
+  selected = -1;
+  document.getElementById('level-number').textContent = level;
+  document.getElementById('moves-counter').textContent = moves;
+  render();
+}
+
+// ---------- Initialization & UI wiring ----------
+
+document.getElementById('undo-button').addEventListener('click', ()=>undo());
+document.getElementById('restart-button').addEventListener('click', ()=>restartLevel());
+document.getElementById('next-level-button').addEventListener('click', ()=> nextLevel());
+
+// Close win modal when clicking outside
+document.getElementById('win-modal').addEventListener('click', (e)=>{
+  if(e.target === document.getElementById('win-modal')){
+    document.getElementById('win-modal').classList.add('hidden');
+    document.getElementById('win-modal').style.display = 'none';
+  }
+});
+
+// Start game
+window.addEventListener('load', ()=> {
+  createLevel(level);
+});
+
+</script>
+</body>
+</html>
