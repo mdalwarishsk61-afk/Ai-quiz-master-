@@ -1,0 +1,103 @@
+<!DOCTYPE html><html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>रंग मिलाओ पहेली - Water Sort Puzzle (Upgraded)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        .tube-container {
+            width: 18vw;
+            max-width: 80px;
+            height: 30vh;
+            max-height: 250px;
+            margin: 10px;
+            display: flex;
+            flex-direction: column-reverse;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.15s ease-in-out;
+            align-items: center;
+        }
+        .tube {
+            
+            position: absolute;
+            top: 0;
+        }
+    </style>
+</head>
+<body class="bg-
+let gameState = [];
+let [i].push(layers[pointer++]);
+    }
+
+    
+    
+    return true;
+}
+
+function handleTubeClick(i){
+    if(selectedTubeIndex===-1){
+        if(gameState[i].length===0){ playSound('error'); return; }
+        selectedTubeIndex = i;
+        renderGame();
+        return;
+    }
+
+    const from = selectedTubeIndex;
+    const to = i;
+    selectedTubeIndex = -1;
+
+    const amount = getPourAmount(from,to);
+    pourLiquid(from,to,amount);
+    renderGame();
+
+    if(checkWin()){
+        setTimeout(()=>{
+            playSound('win');
+            document.getElementById('win-modal').classList.remove('hidden');
+        },400);
+    }
+}
+
+function renderGame(){
+    const board = document.getElementById('game-board');
+    board.innerHTML = '';
+
+    gameState.forEach((tube, i)=>{
+        const container = document.createElement('div');
+        container.className = 'tube-container';
+        container.onclick = ()=>handleTubeClick(i);
+
+        const cap = document.createElement('div');
+        cap.className = 'tube-cap';
+
+        const tubeEl = document.createElement('div');
+        tubeEl.className = 'tube' + (selectedTubeIndex===i ? ' selected' : '');
+
+        tube.forEach((color, layerIndex)=>{
+            const layer = document.createElement('div');
+            layer.className = `tube-liquid-layer layer-${layerIndex+1}`;
+            layer.style.background = color;
+            tubeEl.appendChild(layer);
+        });
+
+        container.appendChild(cap);
+        container.appendChild(tubeEl);
+        board.appendChild(container);
+    });
+}
+
+document.getElementById('undo-button').onclick = ()=>{
+    if(history.length>1){ history.pop(); gameState = JSON.parse(history[history.length-1]); movesCount--; renderGame(); }
+};
+document.getElementById('restart-button').onclick = ()=> createLevel(level);
+document.getElementById('next-level-button').onclick = ()=>{
+    level++;
+    document.getElementById('win-modal').classList.add('hidden');
+    createLevel(level);
+};
+
+window.onload = ()=> createLevel(level);
+</script></body>
+</html>
