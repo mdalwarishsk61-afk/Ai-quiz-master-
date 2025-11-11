@@ -1,0 +1,231 @@
+<!DOCTYPE html><html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>रंग मिलाओ पहेली - Water Sort Puzzle (Upgraded)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        .tube-container {
+            width: 18vw;
+            max-width: 80px;
+            height: 30vh;
+            max-height: 250px;
+            margin: 10px;
+            display: flex;
+            flex-direction: column-reverse;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.15s ease-in-out;
+            align-items: center;
+        }
+        .tube {
+            width: 100%;
+            height: 100%;
+            border: 3px solid #2d3748;
+            border-bottom-left-radius: 40px;
+            border-bottom-right-radius: 40px;
+            border-top: none;
+            overflow: hidden;
+            position: relative;
+            background: rgba(255,255,255,0.08);
+        }
+        .tube.selected {
+            transform: translateY(-10px);
+            border-color: #f6ad55;
+        }
+        .tube-liquid-layer {
+            height: 25%;
+            width: 100%;
+            position: absolute;
+            left: 0;
+            transition: all 0.35s ease;
+        }
+        .layer-1 { bottom: 0; }
+        .layer-2 { bottom: 25%; }
+        .layer-3 { bottom: 50%; }
+        .layer-4 { bottom: 75%; }
+        .tube-cap {
+            width: 50%;
+            height: 10px;
+            background-color: #2d3748;
+            border-radius: 50%;
+            position: absolute;
+            top: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center p-4"><h1 class="text-3xl font-bold mb-4 text-yellow-300">रंग मिलाओ पहेली (Upgraded)</h1><div id="status-bar" class="flex justify-between w-full max-w-xl mb-6 p-3 bg-gray-800 rounded-lg">
+    <div><span class="font-semibold text-blue-300">स्तर:</span> <span id="level-number">1</span></div>
+    <div><span class="font-semibold text-green-300">चालें:</span> <span id="moves-counter">0</span></div>
+</div><div id="game-board" class="w-full max-w-4xl bg-gray-800/60 p-4 rounded-xl shadow-lg flex flex-wrap justify-center"></div><div class="flex space-x-4 mt-6">
+    <button id="undo-button" class="px-6 py-3 bg-red-600 rounded-full">Undo</button>
+    <button id="restart-button" class="px-6 py-3 bg-indigo-600 rounded-full">Restart</button>
+</div><div id="win-modal" class="hidden fixed inset-0 bg-black/70 flex justify-center items-center">
+    <div class="bg-gray-800 p-6 rounded-xl border-4 border-yellow-400 text-center max-w-sm w-full">
+        <h2 class="text-2xl font-bold text-yellow-300 mb-4">🎉 जीत गए!</h2>
+        <button id="next-level-button" class="w-full py-3 text-lg bg-green-500 rounded-lg">Next Level</button>
+    </div>
+</div><script type="module">
+const TUBE_CAPACITY = 4;
+let gameState = [];
+let history = [];
+let selectedTubeIndex = -1;
+let movesCount = 0;
+let level = 1;
+
+const ALL_COLORS = [
+    '#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#a855f7','#ec4899','#06b6d4'
+];
+
+// ✅ Audio fix: prevents auto-play errors on mobile
+let isAudioReady = false;
+document.body.addEventListener("click",()=>{Tone.start(); isAudioReady=true;},{once:true});
+
+const PourSynth = new Tone.Synth().toDestination();
+const ErrorSynth = new Tone.Synth().toDestination();
+const WinSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+
+function playSound(type){ if(!isAudioReady) return;
+    if(type==='pour') PourSynth.triggerAttackRelease("G4","16n");
+    if(type==='error') ErrorSynth.triggerAttackRelease("C2","32n");
+    if(type==='win') WinSynth.triggerAttackRelease(["C5","E5","G5"],"8n");
+}
+
+// ✅ Fix: Properly generated solvable levels
+function createLevel(currentLevel){
+    const numColors = Math.min(ALL_COLORS.length, 3 + Math.floor((currentLevel - 1) / 2));
+    const numTubes = numColors + 2;
+
+    let layers = [];
+    for (let i = 0; i < numColors; i++)
+        layers.push(...Array(4).fill(ALL_COLORS[i]));
+
+    // Shuffle
+    layers.sort(() => Math.random() - 0.5);
+
+    const newGameState = Array(numTubes).fill(0).map(()=>[]);
+
+    let pointer = 0;
+    for(let i=0;i<numColors;i++){
+        for(let j=0;j<4;j++) newGameState[i].push(layers[pointer++]);
+    }
+
+    gameState = newGameState;
+    history = [JSON.stringify(gameState)];
+    movesCount = 0;
+    selectedTubeIndex = -1;
+
+    document.getElementById("level-number").textContent = currentLevel;
+    document.getElementById("moves-counter").textContent = movesCount;
+
+    renderGame();
+}
+
+function checkWin(){
+    return gameState.every(t=>t.length===0 || (t.length===4 && t.every(c=>c===t[0])));
+}
+
+function getTopLiquid(i){
+    const tube = gameState[i];
+    if(tube.length===0) return {color:null,amount:0};
+    const color = tube[tube.length-1];
+    let count=0;
+    for(let j=tube.length-1;j>=0;j--){ if(tube[j]===color) count++; else break; }
+    return {color,amount:count};
+}
+
+function getPourAmount(from,to){
+    if(from===to) return 0;
+    const src = gameState[from], dst = gameState[to];
+    if(src.length===0) return 0;
+
+    const {color,amount} = getTopLiquid(from);
+    const space = 4 - dst.length;
+    if(space===0) return 0;
+
+    const topDst = getTopLiquid(to).color;
+    if(topDst!==null && topDst!==color) return 0;
+
+    return Math.min(space, amount);
+}
+
+function pourLiquid(from,to,amount){
+    if(amount<=0){ playSound('error'); return false; }
+    history.push(JSON.stringify(gameState));
+
+    for(let i=0;i<amount;i++){
+        gameState[to].push(gameState[from].pop());
+    }
+
+    movesCount++;
+    document.getElementById('moves-counter').textContent = movesCount;
+    playSound('pour');
+    return true;
+}
+
+function handleTubeClick(i){
+    if(selectedTubeIndex===-1){
+        if(gameState[i].length===0){ playSound('error'); return; }
+        selectedTubeIndex = i;
+        renderGame();
+        return;
+    }
+
+    const from = selectedTubeIndex;
+    const to = i;
+    selectedTubeIndex = -1;
+
+    const amount = getPourAmount(from,to);
+    pourLiquid(from,to,amount);
+    renderGame();
+
+    if(checkWin()){
+        setTimeout(()=>{
+            playSound('win');
+            document.getElementById('win-modal').classList.remove('hidden');
+        },400);
+    }
+}
+
+function renderGame(){
+    const board = document.getElementById('game-board');
+    board.innerHTML = '';
+
+    gameState.forEach((tube, i)=>{
+        const container = document.createElement('div');
+        container.className = 'tube-container';
+        container.onclick = ()=>handleTubeClick(i);
+
+        const cap = document.createElement('div');
+        cap.className = 'tube-cap';
+
+        const tubeEl = document.createElement('div');
+        tubeEl.className = 'tube' + (selectedTubeIndex===i ? ' selected' : '');
+
+        tube.forEach((color, layerIndex)=>{
+            const layer = document.createElement('div');
+            layer.className = `tube-liquid-layer layer-${layerIndex+1}`;
+            layer.style.background = color;
+            tubeEl.appendChild(layer);
+        });
+
+        container.appendChild(cap);
+        container.appendChild(tubeEl);
+        board.appendChild(container);
+    });
+}
+
+document.getElementById('undo-button').onclick = ()=>{
+    if(history.length>1){ history.pop(); gameState = JSON.parse(history[history.length-1]); movesCount--; renderGame(); }
+};
+document.getElementById('restart-button').onclick = ()=> createLevel(level);
+document.getElementById('next-level-button').onclick = ()=>{
+    level++;
+    document.getElementById('win-modal').classList.add('hidden');
+    createLevel(level);
+};
+
+window.onload = ()=> createLevel(level);
+</script></body>
+</html>
