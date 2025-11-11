@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Game Sound Effects (WebAudio) — Demo</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:24px;background:#f6f8fb;color:#111;}
+    .card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 6px 18px rgba(20,30,60,0.08);max-width:760px;margin:0 auto;}
+    h1{font-size:18px;margin:0 0 10px}
+    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:14px}
+    button{padding:8px 12px;border-radius:8px;border:1px solid #e1e6f0;background:#f3f7ff;cursor:pointer}
+    .big{padding:12px 16px}
+    label{font-size:13px;color:#556}
+    input[type="range"]{width:160px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .note{font-size:13px;color:#667;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Game Sound Effects (Web Audio API) — Demo</h1>
+    <div class="controls">
+      <button id="btn-pour" class="big">Play Pour</button>
+      <button id="btn-splash">Play Splash</button>
+      <button id="btn-success">Play Success</button>
+      <button id="btn-error">Play Error</button>
+      <button id="btn-click">Play Click</button>
+      <button id="btn-undo">Play Undo</button>
+      <button id="btn-restart">Play Restart</button>
+      <div style="margin-left:auto">
+        <label>Volume</label>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9">
+        <button id="mute">Mute</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <button id="demo-pour-seq">Demo: Pour Sequence (3 pours)</button>
+      <button id="demo-level-complete">Demo: Level Complete (pour + success)</button>
+    </div>
+
+    <div class="note">
+      Tip: Hook these functions in your game code where events happen:
+      <code>sounds.playPour()</code>, <code>sounds.playSplash()</code>, <code>sounds.playSuccess()</code>, etc.
+    </div>
+  </div>
+
+<script>
+/*
+  Sound engine using Web Audio API.
+  Provides:
+   - playPour(repeat = 1, durationPer = 180)  // pour whoosh
+   - playSplash()    // small ending splash/pop
+   - playClick()
+   - playUndo()
+   - playRestart()
+   - playError()
+   - playSuccess()
+  Volume control + mute
+*/
+
+// Initialize AudioContext lazily on first user interaction (to satisfy browser autoplay rules)
+let audioCtx = null;
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = volumeValue;
+    masterGain.connect(audioCtx.destination);
+  }
+}
+
+// Master gain and volume
+let masterGain = null;
+let volumeValue = 0.9;
+let isMuted = false;
+
+// Utility: ramp gain for smooth start/end
+function scheduleGain(gainNode, start, end, now, attack = 0.005, release = 0.02) {
+  gainNode.gain.setValueAtTime(start, now);
+  gainNode.gain.linearRampToValueAtTime(end, now + attack);
+  // release will be scheduled by caller
+}
+
+// Small helper to create a bandpass-ish filtered noise for splash
+function noiseBuffer(durationSeconds=0.6) {
+  ensureAudioCtx();
+  const sr = audioCtx.sampleRate;
+  const buffer = audioCtx.createBuffer(1, sr * durationSeconds, sr);
+  const data = buffer.getChannelData(0);
+  for (let i=0; i<data.length; i++){
+    // white noise with exponential decay
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-3 * i / data.length);
+  }
+  return buffer;
+}
+
+// SOUND FUNCTIONS
+const sounds = {
+  // Pour sound: layered oscillators with sweeping freq for whoosh
+  playPour(repeat = 1, durationPer = 180) {
+    // durationPer in ms
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    // if muted or very low volume, bail fast
+    if (isMuted || volumeValue <= 0) return;
+
+    const playOnce = (offsetMs) => {
+      const t0 = audioCtx.currentTime + offsetMs / 1000;
+      // create a subtle rumble (low oscillator)
+      const low = audioCtx.createOscillator();
+      low.type = 'sine';
+      low.frequency.setValueAtTime(120, t0);
+      const lowGain = audioCtx.createGain();
+      lowGain.gain.setValueAtTime(0.0001, t0);
+      lowGain.gain.linearRampToValueAtTime(0.02, t0 + 0.03);
+      lowGain.gain.linearRampToValueAtTime(0.0005, t0 + durationPer/1000 - 0.05);
+      low.connect(lowGain).connect(masterGain);
+
+      // whoosh oscillator (square -> bandpass feel)
+      const whoosh = audioCtx.createOscillator();
+      whoosh.type = 'sawtooth';
+      const whooshGain = audioCtx.createGain();
+      whooshGain.gain.setValueAtTime(0.0001, t0);
+      whooshGain.gain.linearRampToValueAtTime(0.06, t0 + 0.03);
+      whooshGain.gain.linearRampToValueAtTime(0.001, t0 + durationPer/1000 - 0.03);
+
+      // filter sweep
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 0.7;
+      bp.frequency.setValueAtTime(1200, t0);
+      bp.frequency.linearRampToValueAtTime(3000, t0 + durationPer/1000);
+
+      whoosh.frequency.setValueAtTime(220, t0);
+      whoosh.frequency.linearRampToValueAtTime(420, t0 + durationPer/1000);
+
+      whoosh.connect(bp).connect(whooshGain).connect(masterGain);
+
+      low.start(t0);
+      whoosh.start(t0);
+      // stop them after duration
+      low.stop(t0 + durationPer/1000 + 0.02);
+      whoosh.stop(t0 + durationPer/1000 + 0.02);
+
+      // tiny metallic pop at the top (optional)
+      const popOsc = audioCtx.createOscillator();
+      popOsc.type = 'triangle';
+      const popGain = audioCtx.createGain();
+      popGain.gain.setValueAtTime(0.0001, t0 + durationPer/1000 - 0.03);
+      popGain.gain.linearRampToValueAtTime(0.09, t0 + durationPer/1000 - 0.02);
+      popGain.gain.linearRampToValueAtTime(0.0001, t0 + durationPer/1000 + 0.02);
+      popOsc.frequency.setValueAtTime(880, t0 + durationPer/1000 - 0.03);
+      popOsc.frequency.exponentialRampToValueAtTime(1200, t0 + durationPer/1000 - 0.01);
+      popOsc.connect(popGain).connect(masterGain);
+      popOsc.start(t0 + durationPer/1000 - 0.03);
+      popOsc.stop(t0 + durationPer/1000 + 0.02);
+    };
+
+    // Schedule repeats (useful when pouring multiple layers)
+    for (let i=0; i<repeat; i++){
+      playOnce(i * (durationPer - 40));
+    }
+  },
+
+  // Splash / bubble -> use noise buffer + filter + decay
+  playSplash() {
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    if (isMuted || volumeValue <= 0) return;
+
+    const now = audioCtx.currentTime;
+    const buffer = noiseBuffer(0.45);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+
+    const flt = audioCtx.createBiquadFilter();
+    flt.type = 'highpass';
+    flt.frequency.value = 700; // brighter splash
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.2, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    src.connect(flt).connect(g).connect(masterGain);
+    src.start(now);
+    src.stop(now + 0.45);
+  },
+
+  // small click UI sound
+  playClick() {
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    if (isMuted || volumeValue <= 0) return;
+
+    const now = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(900, now);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.08, now + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    o.connect(g).connect(masterGain);
+    o.start(now);
+    o.stop(now + 0.09);
+  },
+
+  // undo: softer descending tone
+  playUndo() {
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    if (isMuted || volumeValue <= 0) return;
+    const now = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(520, now);
+    o.frequency.exponentialRampToValueAtTime(240, now + 0.22);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.06, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+    o.connect(g).connect(masterGain);
+    o.start(now);
+    o.stop(now + 0.3);
+  },
+
+  // restart: two quick clicks + soft thud
+  playRestart() {
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    if (isMuted || volumeValue <= 0) return;
+    // two quick clicks
+    this.playClick();
+    setTimeout(()=> this.playClick(), 110);
+    // thud after
+    setTimeout(()=>{
+      const now = audioCtx.currentTime;
+      const o = audioCtx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(160, now);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.08, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
+      o.connect(g).connect(masterGain);
+      o.start(now);
+      o.stop(now + 0.28);
+    }, 200);
+  },
+
+  // error/invalid action -> short buzzer
+  playError() {
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    if (isMuted || volumeValue <= 0) return;
+    const now = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(320, now);
+    o.frequency.exponentialRampToValueAtTime(140, now + 0.12);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.12, now + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    o.connect(g).connect(masterGain);
+    o.start(now);
+    o.stop(now + 0.2);
+  },
+
+  // success (level complete) -> pleasant rising arpeggio
+  playSuccess() {
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    if (isMuted || volumeValue <= 0) return;
+    const now = audioCtx.currentTime;
+    const notes = [660, 880, 1100].map(n => n * 0.5); // warm triad
+    notes.forEach((freq, i) => {
+      const t = now + i * 0.12;
+      const o = audioCtx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(freq, t);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.09, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+      o.connect(g).connect(masterGain);
+      o.start(t);
+      o.stop(t + 0.38);
+    });
+    // small sparkle (noise) on top
+    setTimeout(()=> this.playSplash(), 360);
+  }
+};
+
+// UI wiring
+const btnPour = document.getElementById('btn-pour');
+const btnSplash = document.getElementById('btn-splash');
+const btnSuccess = document.getElementById('btn-success');
+const btnError = document.getElementById('btn-error');
+const btnClick = document.getElementById('btn-click');
+const btnUndo = document.getElementById('btn-undo');
+const btnRestart = document.getElementById('btn-restart');
+const demoPourSeq = document.getElementById('demo-pour-seq');
+const demoLevelComplete = document.getElementById('demo-level-complete');
+const vol = document.getElementById('volume');
+const muteBtn = document.getElementById('mute');
+
+btnPour.addEventListener('click', ()=> {
+  // typical pouring: playPour(repeatLayers, durationPerMs)
+  // e.g., pour one layer
+  sounds.playPour(1, 180);
+});
+btnSplash.addEventListener('click', ()=> sounds.playSplash());
+btnSuccess.addEventListener('click', ()=> sounds.playSuccess());
+btnError.addEventListener('click', ()=> sounds.playError());
+btnClick.addEventListener('click', ()=> sounds.playClick());
+btnUndo.addEventListener('click', ()=> sounds.playUndo());
+btnRestart.addEventListener('click', ()=> sounds.playRestart());
+
+demoPourSeq.addEventListener('click', ()=>{
+  // Simulate pouring 3 layers quickly (use repeat or schedule)
+  // This will create 3 overlapping pour sounds that feel like stacked pours
+  sounds.playPour(3, 160);
+  // finalize with splash
+  setTimeout(()=> sounds.playSplash(), 520);
+});
+
+demoLevelComplete.addEventListener('click', ()=>{
+  // pour + success
+  sounds.playPour(2, 160);
+  setTimeout(()=> sounds.playSuccess(), 420);
+});
+
+// Volume & mute handling
+vol.addEventListener('input', (e)=>{
+  const v = parseFloat(e.target.value);
+  volumeValue = v;
+  ensureAudioCtx();
+  if (masterGain) masterGain.gain.setValueAtTime(v, audioCtx.currentTime);
+});
+muteBtn.addEventListener('click', ()=>{
+  isMuted = !isMuted;
+  muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+});
+
+// For browsers that require gesture to start audioContext, resume on first interaction
+['click','touchstart','keydown'].forEach(evt=>{
+  window.addEventListener(evt, function initOnce(){
+    if (!audioCtx) {
+      try { ensureAudioCtx(); }
+      catch(e) { /* ignore */ }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    // remove listener after first run
+    window.removeEventListener(evt, initOnce);
+  }, {passive:true});
+});
+</script>
+</body>
+</html>
