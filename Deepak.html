@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Sort Puzzle</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .info-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .game-board {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .tube {
+            width: 70px;
+            height: 200px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            border-bottom: 10px solid rgba(255, 255, 255, 0.5);
+            border-radius: 10px 10px 30px 30px;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tube::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom, transparent 80%, rgba(0, 0, 0, 0.2) 100%);
+            pointer-events: none;
+            border-radius: 7px 7px 27px 27px;
+        }
+
+        .tube.selected {
+            transform: translateY(-10px);
+            border-color: gold;
+            box-shadow: 0 0 15px gold;
+        }
+
+        .liquid {
+            width: 90%;
+            height: 40px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #undo-btn {
+            background: linear-gradient(to right, #3498db, #2980b9);
+            color: white;
+        }
+
+        #restart-btn {
+            background: linear-gradient(to right, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        #hint-btn {
+            background: linear-gradient(to right, #2ecc71, #27ae60);
+            color: white;
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .level-complete {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+
+        .level-complete.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .celebration {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: bounce 1s infinite alternate;
+        }
+
+        .completion-message {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .next-level-btn {
+            background: linear-gradient(to right, #9b59b6, #8e44ad);
+            color: white;
+            font-size: 1.2rem;
+            padding: 15px 40px;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-20px); }
+        }
+
+        @keyframes pour {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0); }
+        }
+
+        .pouring {
+            animation: pour 0.5s ease;
+        }
+
+        @media (max-width: 600px) {
+            .tube {
+                width: 60px;
+                height: 160px;
+            }
+            
+            .liquid {
+                height: 32px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .game-info {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Water Sort Puzzle</h1>
+            <p>Sort the colored liquids until each tube contains only one color!</p>
+        </div>
+        
+        <div class="game-info">
+            <div class="info-item">
+                <div class="info-label">LEVEL</div>
+                <div class="info-value" id="level">1</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">MOVES</div>
+                <div class="info-value" id="moves">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">TIME</div>
+                <div class="info-value" id="timer">00:00</div>
+            </div>
+        </div>
+        
+        <div class="game-board" id="game-board">
+            <!-- Tubes will be generated here -->
+        </div>
+        
+        <div class="controls">
+            <button id="undo-btn">Undo</button>
+            <button id="restart-btn">Restart</button>
+            <button id="hint-btn">Hint</button>
+        </div>
+    </div>
+    
+    <div class="level-complete" id="level-complete">
+        <div class="celebration">🎉</div>
+        <div class="completion-message">Level Complete!</div>
+        <button class="next-level-btn" id="next-level-btn">Next Level</button>
+    </div>
+
+    <script>
+        // Game configuration
+        const config = {
+            tubeCapacity: 4,
+            initialLevel: 1,
+            colors: ['#FF5252', '#4CAF50', '#2196F3', '#FFC107', '#9C27B0', '#00BCD4', '#8BC34A', '#E91E63']
+        };
+
+        // Game state
+        let gameState = {
+            level: config.initialLevel,
+            moves: 0,
+            timer: 0,
+            timerInterval: null,
+            selectedTube: null,
+            tubes: [],
+            moveHistory: []
+        };
+
+        // DOM elements
+        const gameBoard = document.getElementById('game-board');
+        const levelDisplay = document.getElementById('level');
+        const movesDisplay = document.getElementById('moves');
+        const timerDisplay = document.getElementById('timer');
+        const undoBtn = document.getElementById('undo-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const hintBtn = document.getElementById('hint-btn');
+        const levelComplete = document.getElementById('level-complete');
+        const nextLevelBtn = document.getElementById('next-level-btn');
+
+        // Initialize the game
+        function initGame() {
+            resetGameState();
+            generateLevel();
+            renderTubes();
+            startTimer();
+            setupEventListeners();
+        }
+
+        // Reset game state
+        function resetGameState() {
+            gameState.moves = 0;
+            gameState.timer = 0;
+            gameState.selectedTube = null;
+            gameState.tubes = [];
+            gameState.moveHistory = [];
+            
+            movesDisplay.textContent = '0';
+            timerDisplay.textContent = '00:00';
+            
+            if (gameState.timerInterval) {
+                clearInterval(gameState.timerInterval);
+            }
+        }
+
+        // Generate a level based on current level
+        function generateLevel() {
+            // Clear previous tubes
+            gameState.tubes = [];
+            
+            // Determine number of colors and tubes based on level
+            const numColors = Math.min(3 + Math.floor(gameState.level / 2), config.colors.length);
+            const numTubes = numColors + 2; // Extra empty tubes
+            
+            // Select colors for this level
+            const levelColors = config.colors.slice(0, numColors);
+            
+            // Create the initial color distribution
+            const colorDistribution = [];
+            for (let i = 0; i < numColors; i++) {
+                for (let j = 0; j < config.tubeCapacity; j++) {
+                    colorDistribution.push(levelColors[i]);
+                }
+            }
+            
+            // Shuffle the colors
+            shuffleArray(colorDistribution);
+            
+            // Distribute colors into tubes
+            for (let i = 0; i < numTubes; i++) {
+                const tube = [];
+                
+                // Fill first numColors tubes with colors, leave others empty
+                if (i < numColors) {
+                    for (let j = 0; j < config.tubeCapacity; j++) {
+                        tube.push(colorDistribution[i * config.tubeCapacity + j]);
+                    }
+                }
+                
+                gameState.tubes.push(tube);
+            }
+            
+            // Ensure the level is solvable by making some adjustments if needed
+            ensureSolvability();
+        }
+
+        // Shuffle array using Fisher-Yates algorithm
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // Simple solvability check and adjustment
+        function ensureSolvability() {
+            // This is a simplified version - in a real game you'd have a more robust method
+            // For now, we'll just make sure there's at least one move available
+            let hasValidMove = false;
+            
+            for (let i = 0; i < gameState.tubes.length; i++) {
+                if (canPourFrom(i)) {
+                    hasValidMove = true;
+                    break;
+                }
+            }
+            
+            // If no valid moves, rearrange one tube to create a move
+            if (!hasValidMove) {
+                for (let i = 0; i < gameState.tubes.length; i++) {
+                    if (gameState.tubes[i].length > 0) {
+                        const color = gameState.tubes[i].pop();
+                        // Find an empty tube or one with matching top color
+                        for (let j = 0; j < gameState.tubes.length; j++) {
+                            if (i !== j && (gameState.tubes[j].length === 0 || 
+                                gameState.tubes[j][gameState.tubes[j].length - 1] === color)) {
+                                gameState.tubes[j].push(color);
+                                return;
+                            }
+                        }
+                        // If no suitable tube found, put it back
+                        gameState.tubes[i].push(color);
+                    }
+                }
+            }
+        }
+
+        // Render tubes on the game board
+        function renderTubes() {
+            gameBoard.innerHTML = '';
+            
+            gameState.tubes.forEach((tube, index) => {
+                const tubeElement = document.createElement('div');
+                tubeElement.className = 'tube';
+                tubeElement.dataset.index = index;
+                
+                // Add liquid layers
+                tube.forEach(color => {
+                    const liquid = document.createElement('div');
+                    liquid.className = 'liquid';
+                    liquid.style.backgroundColor = color;
+                    tubeElement.appendChild(liquid);
+                });
+                
+                // Add empty space if tube is not full
+                const emptySlots = config.tubeCapacity - tube.length;
+                for (let i = 0; i < emptySlots; i++) {
+                    const empty = document.createElement('div');
+                    empty.className = 'liquid';
+                    empty.style.backgroundColor = 'transparent';
+                    tubeElement.appendChild(empty);
+                }
+                
+                gameBoard.appendChild(tubeElement);
+            });
+            
+            // Update selected tube visual
+            if (gameState.selectedTube !== null) {
+                gameBoard.children[gameState.selectedTube].classList.add('selected');
+            }
+        }
+
+        // Check if a tube can be poured from
+        function canPourFrom(tubeIndex) {
+            const tube = gameState.tubes[tubeIndex];
+            return tube.length > 0;
+        }
+
+        // Check if pouring from one tube to another is valid
+        function isValidPour(fromIndex, toIndex) {
+            if (fromIndex === toIndex) return false;
+            
+            const fromTube = gameState.tubes[fromIndex];
+            const toTube = gameState.tubes[toIndex];
+            
+            // Can't pour from empty tube
+            if (fromTube.length === 0) return false;
+            
+            // Can pour to empty tube
+            if (toTube.length === 0) return true;
+            
+            // Can only pour if colors match and there's space
+            const fromColor = fromTube[fromTube.length - 1];
+            const toColor = toTube[toTube.length - 1];
+            
+            return fromColor === toColor && toTube.length < config.tubeCapacity;
+        }
+
+        // Perform pour operation
+        function pour(fromIndex, toIndex) {
+            if (!isValidPour(fromIndex, toIndex)) return false;
+            
+            // Save state for undo
+            gameState.moveHistory.push(JSON.parse(JSON.stringify(gameState.tubes)));
+            
+            const fromTube = gameState.tubes[fromIndex];
+            const toTube = gameState.tubes[toIndex];
+            
+            // Determine how many consecutive same colors we can pour
+            let pourCount = 0;
+            const pourColor = fromTube[fromTube.length - 1];
+            
+            for (let i = fromTube.length - 1; i >= 0; i--) {
+                if (fromTube[i] === pourColor && toTube.length + pourCount < config.tubeCapacity) {
+                    pourCount++;
+                } else {
+                    break;
+                }
+            }
+            
+            // Perform the pour
+            for (let i = 0; i < pourCount; i++) {
+                toTube.push(fromTube.pop());
+            }
+            
+            // Update moves
+            gameState.moves++;
+            movesDisplay.textContent = gameState.moves;
+            
+            // Check for level completion
+            if (checkLevelComplete()) {
+                completeLevel();
+            }
+            
+            return true;
+        }
+
+        // Check if level is complete
+        function checkLevelComplete() {
+            for (const tube of gameState.tubes) {
+                // A tube is valid if it's empty or has only one color
+                if (tube.length > 0) {
+                    const color = tube[0];
+                    for (let i = 1; i < tube.length; i++) {
+                        if (tube[i] !== color) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // Handle tube click
+        function handleTubeClick(index) {
+            // If no tube is selected, select this one if it can be poured from
+            if (gameState.selectedTube === null) {
+                if (canPourFrom(index)) {
+                    gameState.selectedTube = index;
+                    renderTubes();
+                    playSound('select');
+                }
+            } else {
+                // If a tube is already selected, try to pour
+                if (pour(gameState.selectedTube, index)) {
+                    playSound('pour');
+                    // Add pouring animation
+                    const fromTube = gameBoard.children[gameState.selectedTube];
+                    const toTube = gameBoard.children[index];
+                    
+                    fromTube.classList.add('pouring');
+                    toTube.classList.add('pouring');
+                    
+                    setTimeout(() => {
+                        fromTube.classList.remove('pouring');
+                        toTube.classList.remove('pouring');
+                        renderTubes();
+                    }, 500);
+                } else {
+                    playSound('error');
+                }
+                
+                // Deselect regardless of pour success
+                gameState.selectedTube = null;
+                renderTubes();
+            }
+        }
+
+        // Undo last move
+        function undo() {
+            if (gameState.moveHistory.length > 0) {
+                gameState.tubes = gameState.moveHistory.pop();
+                gameState.moves++;
+                movesDisplay.textContent = gameState.moves;
+                gameState.selectedTube = null;
+                renderTubes();
+                playSound('undo');
+            }
+        }
+
+        // Restart level
+        function restart() {
+            if (confirm('Are you sure you want to restart this level?')) {
+                resetGameState();
+                generateLevel();
+                renderTubes();
+                startTimer();
+                playSound('restart');
+            }
+        }
+
+        // Provide a hint
+        function giveHint() {
+            // Find a valid move
+            for (let i = 0; i < gameState.tubes.length; i++) {
+                for (let j = 0; j < gameState.tubes.length; j++) {
+                    if (isValidPour(i, j)) {
+                        // Highlight the tubes briefly
+                        const fromTube = gameBoard.children[i];
+                        const toTube = gameBoard.children[j];
+                        
+                        fromTube.style.boxShadow = '0 0 20px yellow';
+                        toTube.style.boxShadow = '0 0 20px yellow';
+                        
+                        setTimeout(() => {
+                            fromTube.style.boxShadow = '';
+                            toTube.style.boxShadow = '';
+                        }, 1000);
+                        
+                        playSound('hint');
+                        return;
+                    }
+                }
+            }
+            
+            // If no valid move found
+            alert('No hints available! Try restarting the level.');
+        }
+
+        // Complete the level
+        function completeLevel() {
+            clearInterval(gameState.timerInterval);
+            levelComplete.classList.add('show');
+            playSound('complete');
+        }
+
+        // Start next level
+        function nextLevel() {
+            gameState.level++;
+            levelDisplay.textContent = gameState.level;
+            levelComplete.classList.remove('show');
+            initGame();
+        }
+
+        // Start timer
+        function startTimer() {
+            gameState.timer = 0;
+            updateTimerDisplay();
+            
+            gameState.timerInterval = setInterval(() => {
+                gameState.timer++;
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        // Update timer display
+        function updateTimerDisplay() {
+            const minutes = Math.floor(gameState.timer / 60);
+            const seconds = gameState.timer % 60;
+            timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Tube clicks
+            gameBoard.addEventListener('click', (e) => {
+                const tube = e.target.closest('.tube');
+                if (tube) {
+                    handleTubeClick(parseInt(tube.dataset.index));
+                }
+            });
+            
+            // Control buttons
+            undoBtn.addEventListener('click', undo);
+            restartBtn.addEventListener('click', restart);
+            hintBtn.addEventListener('click', giveHint);
+            nextLevelBtn.addEventListener('click', nextLevel);
+        }
+
+        // Simple sound effects using the Web Audio API
+        function playSound(type) {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                let frequency = 440;
+                let duration = 0.1;
+                
+                switch(type) {
+                    case 'select':
+                        frequency = 523.25; // C5
+                        break;
+                    case 'pour':
+                        frequency = 659.25; // E5
+                        duration = 0.3;
+                        break;
+                    case 'error':
+                        frequency = 220; // A3
+                        break;
+                    case 'undo':
+                        frequency = 392; // G4
+                        break;
+                    case 'restart':
+                        frequency = 349.23; // F4
+                        break;
+                    case 'hint':
+                        frequency = 783.99; // G5
+                        break;
+                    case 'complete':
+                        // Play a little victory melody
+                        playVictoryMelody(audioContext);
+                        return;
+                }
+                
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + duration);
+            } catch (e) {
+                console.log('Audio not supported');
+            }
+        }
+
+        // Play victory melody
+        function playVictoryMelody(audioContext) {
+            const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+            const noteDuration = 0.2;
+            
+            notes.forEach((frequency, index) => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime + index * noteDuration);
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime + index * noteDuration);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + (index + 1) * noteDuration);
+                
+                oscillator.start(audioContext.currentTime + index * noteDuration);
+                oscillator.stop(audioContext.currentTime + (index + 1) * noteDuration);
+            });
+        }
+
+        // Initialize the game when page loads
+        window.addEventListener('load', initGame);
+    </script>
+</body>
+</html>
