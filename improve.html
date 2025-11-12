@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Sort Puzzle - रंगों को अलग करें</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .instructions {
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        .instructions h2 {
+            margin-bottom: 10px;
+            color: #ffcc00;
+        }
+
+        .instructions ul {
+            list-style-position: inside;
+            margin-left: 10px;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .info-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .game-board {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+        }
+
+        .tube {
+            width: 70px;
+            height: 200px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            border-bottom: 10px solid rgba(255, 255, 255, 0.5);
+            border-radius: 10px 10px 30px 30px;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tube::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom, transparent 80%, rgba(0, 0, 0, 0.2) 100%);
+            pointer-events: none;
+            border-radius: 7px 7px 27px 27px;
+        }
+
+        .tube.selected {
+            transform: translateY(-10px);
+            border-color: gold;
+            box-shadow: 0 0 15px gold;
+        }
+
+        .liquid {
+            width: 90%;
+            height: 40px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #undo-btn {
+            background: linear-gradient(to right, #3498db, #2980b9);
+            color: white;
+        }
+
+        #restart-btn {
+            background: linear-gradient(to right, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        #hint-btn {
+            background: linear-gradient(to right, #2ecc71, #27ae60);
+            color: white;
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .level-complete {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+
+        .level-complete.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .celebration {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: bounce 1s infinite alternate;
+        }
+
+        .completion-message {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .next-level-btn {
+            background: linear-gradient(to right, #9b59b6, #8e44ad);
+            color: white;
+            font-size: 1.2rem;
+            padding: 15px 40px;
+        }
+
+        .color-legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .color-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-20px); }
+        }
+
+        @keyframes pour {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0); }
+        }
+
+        .pouring {
+            animation: pour 0.5s ease;
+        }
+
+        @media (max-width: 600px) {
+            .tube {
+                width: 60px;
+                height: 160px;
+            }
+            
+            .liquid {
+                height: 32px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .game-info {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            
+            .instructions {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Water Sort Puzzle</h1>
+            <p>रंगों को अलग करें - हर ट्यूब में केवल एक ही रंग होना चाहिए!</p>
+        </div>
+        
+        <div class="instructions">
+            <h2>खेलने का तरीका:</h2>
+            <ul>
+                <li>एक ट्यूब पर क्लिक करके उसे चुनें, फिर दूसरी ट्यूब पर क्लिक करके रंग डालें</li>
+                <li>आप केवल तभी रंग डाल सकते हैं जब ऊपर के रंग मेल खाते हों या गंतव्य ट्यूब खाली हो</li>
+                <li>प्रत्येक ट्यूब में अधिकतम 4 यूनिट रंग आ सकता है</li>
+                <li>स्तर पूरा होगा जब प्रत्येक ट्यूब में केवल एक ही रंग होगा या ट्यूब खाली होगी</li>
+            </ul>
+        </div>
+        
+        <div class="color-legend">
+            <div class="color-item">
+                <div class="color-box" style="background-color: #FF5252;"></div>
+                <span>लाल</span>
+            </div>
+            <div class="color-item">
+                <div class="color-box" style="background-color: #FF9800;"></div>
+                <span>नारंगी</span>
+            </div>
+            <div class="color-item">
+                <div class="color-box" style="background-color: #FFC107;"></div>
+                <span>पीला</span>
+            </div>
+            <div class="color-item">
+                <div class="color-box" style="background-color: #4CAF50;"></div>
+                <span>हरा</span>
+            </div>
+            <div class="color-item">
+                <div class="color-box" style="background-color: #2196F3;"></div>
+                <span>नीला</span>
+            </div>
+            <div class="color-item">
+                <div class="color-box" style="background-color: #9C27B0;"></div>
+                <span>जामुनी</span>
+            </div>
+        </div>
+        
+        <div class="game-info">
+            <div class="info-item">
+                <div class="info-label">स्तर</div>
+                <div class="info-value" id="level">1</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">चालें</div>
+                <div class="info-value" id="moves">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">समय</div>
+                <div class="info-value" id="timer">00:00</div>
+            </div>
+        </div>
+        
+        <div class="game-board" id="game-board">
+            <!-- ट्यूब यहाँ जेनरेट होंगी -->
+        </div>
+        
+        <div class="controls">
+            <button id="undo-btn">पूर्ववत</button>
+            <button id="restart-btn">फिर से शुरू</button>
+            <button id="hint-btn">संकेत</button>
+        </div>
+    </div>
+    
+    <div class="level-complete" id="level-complete">
+        <div class="celebration">🎉</div>
+        <div class="completion-message">स्तर पूरा हुआ!</div>
+        <button class="next-level-btn" id="next-level-btn">अगला स्तर</button>
+    </div>
+
+    <script>
+        // गेम कॉन्फ़िगरेशन
+        const config = {
+            tubeCapacity: 4,
+            initialLevel: 1,
+            colors: [
+                { name: 'लाल', value: '#FF5252' },
+                { name: 'नारंगी', value: '#FF9800' },
+                { name: 'पीला', value: '#FFC107' },
+                { name: 'हरा', value: '#4CAF50' },
+                { name: 'नीला', value: '#2196F3' },
+                { name: 'जामुनी', value: '#9C27B0' }
+            ]
+        };
+
+        // गेम स्टेट
+        let gameState = {
+            level: config.initialLevel,
+            moves: 0,
+            timer: 0,
+            timerInterval: null,
+            selectedTube: null,
+            tubes: [],
+            moveHistory: []
+        };
+
+        // DOM एलिमेंट्स
+        const gameBoard = document.getElementById('game-board');
+        const levelDisplay = document.getElementById('level');
+        const movesDisplay = document.getElementById('moves');
+        const timerDisplay = document.getElementById('timer');
+        const undoBtn = document.getElementById('undo-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const hintBtn = document.getElementById('hint-btn');
+        const levelComplete = document.getElementById('level-complete');
+        const nextLevelBtn = document.getElementById('next-level-btn');
+
+        // गेम इनिशियलाइज़ करें
+        function initGame() {
+            resetGameState();
+            generateLevel();
+            renderTubes();
+            startTimer();
+            setupEventListeners();
+        }
+
+        // गेम स्टेट रीसेट करें
+        function resetGameState() {
+            gameState.moves = 0;
+            gameState.timer = 0;
+            gameState.selectedTube = null;
+            gameState.tubes = [];
+            gameState.moveHistory = [];
+            
+            movesDisplay.textContent = '0';
+            timerDisplay.textContent = '00:00';
+            
+            if (gameState.timerInterval) {
+                clearInterval(gameState.timerInterval);
+            }
+        }
+
+        // वर्तमान स्तर के आधार पर लेवल जेनरेट करें
+        function generateLevel() {
+            // पिछली ट्यूब्स साफ़ करें
+            gameState.tubes = [];
+            
+            // ट्यूब्स की संख्या निर्धारित करें (6 रंग + 2 खाली ट्यूब)
+            const numColors = config.colors.length;
+            const numTubes = numColors + 2;
+            
+            // प्रारंभिक रंग वितरण बनाएं
+            const colorDistribution = [];
+            for (let i = 0; i < numColors; i++) {
+                for (let j = 0; j < config.tubeCapacity; j++) {
+                    colorDistribution.push(config.colors[i].value);
+                }
+            }
+            
+            // रंगों को शफ़ल करें
+            shuffleArray(colorDistribution);
+            
+            // रंगों को ट्यूब्स में वितरित करें
+            for (let i = 0; i < numTubes; i++) {
+                const tube = [];
+                
+                // पहली numColors ट्यूब्स को रंगों से भरें, 2 ट्यूब खाली छोड़ें
+                if (i < numColors) {
+                    for (let j = 0; j < config.tubeCapacity; j++) {
+                        tube.push(colorDistribution[i * config.tubeCapacity + j]);
+                    }
+                }
+                
+                gameState.tubes.push(tube);
+            }
+            
+            // सुनिश्चित करें कि लेवल सॉल्वेबल है
+            ensureSolvability();
+        }
+
+        // फिशर-येट्स एल्गोरिथ्म का उपयोग करके ऐरे को शफ़ल करें
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // सॉल्वेबिलिटी चेक और एडजस्टमेंट
+        function ensureSolvability() {
+            // सुनिश्चित करें कि कम से कम एक वैध मूव उपलब्ध है
+            let hasValidMove = false;
+            
+            for (let i = 0; i < gameState.tubes.length; i++) {
+                if (canPourFrom(i)) {
+                    hasValidMove = true;
+                    break;
+                }
+            }
+            
+            // यदि कोई वैध मूव नहीं है, तो एक ट्यूब को रीअरेंज करें
+            if (!hasValidMove) {
+                for (let i = 0; i < gameState.tubes.length; i++) {
+                    if (gameState.tubes[i].length > 0) {
+                        const color = gameState.tubes[i].pop();
+                        // खाली ट्यूब या मैचिंग टॉप कलर वाली ट्यूब ढूंढें
+                        for (let j = 0; j < gameState.tubes.length; j++) {
+                            if (i !== j && (gameState.tubes[j].length === 0 || 
+                                gameState.tubes[j][gameState.tubes[j].length - 1] === color)) {
+                                gameState.tubes[j].push(color);
+                                return;
+                            }
+                        }
+                        // यदि कोई उपयुक्त ट्यूब नहीं मिली, तो वापस डालें
+                        gameState.tubes[i].push(color);
+                    }
+                }
+            }
+        }
+
+        // गेम बोर्ड पर ट्यूब्स रेंडर करें
+        function renderTubes() {
+            gameBoard.innerHTML = '';
+            
+            gameState.tubes.forEach((tube, index) => {
+                const tubeElement = document.createElement('div');
+                tubeElement.className = 'tube';
+                tubeElement.dataset.index = index;
+                
+                // लिक्विड लेयर्स जोड़ें
+                tube.forEach(color => {
+                    const liquid = document.createElement('div');
+                    liquid.className = 'liquid';
+                    liquid.style.backgroundColor = color;
+                    tubeElement.appendChild(liquid);
+                });
+                
+                // यदि ट्यूब फुल नहीं है तो खाली स्पेस जोड़ें
+                const emptySlots = config.tubeCapacity - tube.length;
+                for (let i = 0; i < emptySlots; i++) {
+                    const empty = document.createElement('div');
+                    empty.className = 'liquid';
+                    empty.style.backgroundColor = 'transparent';
+                    tubeElement.appendChild(empty);
+                }
+                
+                gameBoard.appendChild(tubeElement);
+            });
+            
+            // सेलेक्टेड ट्यूब विजुअल अपडेट करें
+            if (gameState.selectedTube !== null) {
+                gameBoard.children[gameState.selectedTube].classList.add('selected');
+            }
+        }
+
+        // जांचें कि क्या ट्यूब से रंग डाला जा सकता है
+        function canPourFrom(tubeIndex) {
+            const tube = gameState.tubes[tubeIndex];
+            return tube.length > 0;
+        }
+
+        // जांचें कि क्या एक ट्यूब से दूसरी ट्यूब में रंग डालना वैध है
+        function isValidPour(fromIndex, toIndex) {
+            if (fromIndex === toIndex) return false;
+            
+            const fromTube = gameState.tubes[fromIndex];
+            const toTube = gameState.tubes[toIndex];
+            
+            // खाली ट्यूब से नहीं डाल सकते
+            if (fromTube.length === 0) return false;
+            
+            // खाली ट्यूब में डाल सकते हैं
+            if (toTube.length === 0) return true;
+            
+            // केवल तभी डाल सकते हैं जब रंग मेल खाते हों और जगह हो
+            const fromColor = fromTube[fromTube.length - 1];
+            const toColor = toTube[toTube.length - 1];
+            
+            return fromColor === toColor && toTube.length < config.tubeCapacity;
+        }
+
+        // रंग डालने का ऑपरेशन करें
+        function pour(fromIndex, toIndex) {
+            if (!isValidPour(fromIndex, toIndex)) return false;
+            
+            // अनडो के लिए स्टेट सेव करें
+            gameState.moveHistory.push(JSON.parse(JSON.stringify(gameState.tubes)));
+            
+            const fromTube = gameState.tubes[fromIndex];
+            const toTube = gameState.tubes[toIndex];
+            
+            // निर्धारित करें कि कितने लगातार समान रंग डाल सकते हैं
+            let pourCount = 0;
+            const pourColor = fromTube[fromTube.length - 1];
+            
+            for (let i = fromTube.length - 1; i >= 0; i--) {
+                if (fromTube[i] === pourColor && toTube.length + pourCount < config.tubeCapacity) {
+                    pourCount++;
+                } else {
+                    break;
+                }
+            }
+            
+            // रंग डालें
+            for (let i = 0; i < pourCount; i++) {
+                toTube.push(fromTube.pop());
+            }
+            
+            // चालें अपडेट करें
+            gameState.moves++;
+            movesDisplay.textContent = gameState.moves;
+            
+            // लेवल कम्प्लीशन की जांच करें
+            if (checkLevelComplete()) {
+                completeLevel();
+            }
+            
+            return true;
+        }
+
+        // जांचें कि लेवल पूरा हुआ है या नहीं
+        function checkLevelComplete() {
+            for (const tube of gameState.tubes) {
+                // एक ट्यूब वैध है यदि वह खाली है या उसमें केवल एक रंग है
+                if (tube.length > 0) {
+                    const color = tube[0];
+                    for (let i = 1; i < tube.length; i++) {
+                        if (tube[i] !== color) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // ट्यूब क्लिक को हैंडल करें
+        function handleTubeClick(index) {
+            // यदि कोई ट्यूब सेलेक्ट नहीं है, तो इस ट्यूब को सेलेक्ट करें यदि इससे रंग डाला जा सकता है
+            if (gameState.selec
