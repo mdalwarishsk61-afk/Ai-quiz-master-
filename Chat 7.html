@@ -1,0 +1,283 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Water Sort Puzzle — demo</title>
+  <style>
+    :root{
+      --bg:#f6a31c;
+      --panel:#5a2b2b;
+      --tube-bg: rgba(255,255,255,0.06);
+      --tube-border: rgba(255,255,255,0.25);
+      --glass:#f5f5f5;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0}
+    body{
+      display:flex;align-items:center;justify-content:center;min-height:100%;background:linear-gradient(180deg,#8b1a2b 0%, #f6a31c 100%);padding:24px;box-sizing:border-box;color:#222;
+    }
+    .app{width:980px;max-width:96vw;background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));border-radius:18px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,0.25);}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    h1{margin:0;font-size:18px;color:white}
+    .status{display:flex;gap:12px;color:white;align-items:center}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:18px;background:linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02));border-radius:12px}
+    .tube{height:280px;border-radius:18px;position:relative;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.03));border:4px solid rgba(255,255,255,0.06);display:flex;align-items:flex-end;justify-content:center;padding:18px;box-sizing:border-box}
+    .tube-inner{width:58%;height:90%;background:transparent;border-radius:12px;border:3px solid rgba(255,255,255,0.08);position:relative;overflow:hidden;display:flex;flex-direction:column-reverse;justify-content:flex-start}
+    .slot{height:25%;width:100%;box-sizing:border-box}
+    .slot > .color{height:100%;border-radius:6px;margin:4px 6px;box-shadow:inset 0 -3px 6px rgba(0,0,0,0.2)}
+    .tube.selected{outline:4px solid rgba(255,255,255,0.12);transform:translateY(-6px)}
+    .controls{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:14px}
+    button{padding:10px 18px;border-radius:28px;border:0;cursor:pointer;font-weight:600}
+    .btn-undo{background:#6b7280;color:white}
+    .btn-restart{background:#e74c3c;color:white}
+    .btn-hint{background:#10b981;color:white}
+    .small{font-size:13px;color:rgba(255,255,255,0.9)}
+    footer{margin-top:12px;text-align:center;color:rgba(255,255,255,0.9)}
+    @media (max-width:720px){.grid{grid-template-columns:repeat(2,1fr)}.tube{height:220px}.app{padding:12px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Water Sort Puzzle (demo)</h1>
+      <div class="status">
+        <div class="small">Moves: <span id="moves">0</span></div>
+        <div class="small">Time: <span id="timer">00:00</span></div>
+      </div>
+    </header><div class="grid" id="board"></div>
+
+<div class="controls">
+  <button id="undo" class="btn-undo">Undo</button>
+  <button id="restart" class="btn-restart">Restart</button>
+  <button id="hint" class="btn-hint">Hint</button>
+</div>
+
+<footer class="small">Click a tube to select source, then click destination. Tap the same tube again to cancel.</footer>
+
+  </div>  <script>
+    /*
+      Single-file Water Sort Puzzle
+      - tubes is array of arrays (bottom to top). Each slot is a color string or null.
+      - valid move: source not empty, dest not full, and (dest empty OR top color equals source top color).
+      - when pouring, pour continuous same-color blocks from source until dest full or source top color changes.
+      - undo stack stores deep copies of state
+    */
+
+    // Config: number of tubes and capacity
+    const TUBE_CAPACITY = 4;
+    const TOTAL_TUBES = 8; // matches image layout: 8 tubes, 6 filled + 2 empty
+
+    // Colors used in the initial configuration (strings or hex)
+    const COLORS = ['#FFD12A','#3399FF','#9B59B6','#FF6B6B','#27AE60','#F39C12'];
+
+    // Example initial level (6 tubes filled, 2 empty). Each inner array is bottom-to-top.
+    const initialLevel = [
+      ['#F39C12','#3399FF','#9B59B6','#FFD12A'],
+      ['#27AE60','#FF6B6B','#3399FF','#FF6B6B'],
+      ['#FFD12A','#9B59B6','#F39C12','#9B59B6'],
+      ['#F39C12','#3399FF','#27AE60','#3399FF'],
+      ['#FFD12A','#27AE60','#FF6B6B','#9B59B6'],
+      ['#F39C12','#27AE60','#FF6B6B','#9B59B6'],
+      [],
+      []
+    ];
+
+    // State
+    let tubes = [];
+    let selected = null;
+    let moves = 0;
+    let timerInterval = null;
+    let seconds = 0;
+    const undoStack = [];
+
+    const board = document.getElementById('board');
+    const movesEl = document.getElementById('moves');
+    const timerEl = document.getElementById('timer');
+    const undoBtn = document.getElementById('undo');
+    const restartBtn = document.getElementById('restart');
+    const hintBtn = document.getElementById('hint');
+
+    function cloneState(){
+      return tubes.map(t=>t.slice());
+    }
+
+    function pushUndo(){
+      undoStack.push({tubes: cloneState(), moves, seconds});
+      if(undoStack.length>50) undoStack.shift();
+    }
+
+    function init(level){
+      // reset
+      tubes = level.map(t => t.slice());
+      selected = null; moves = 0; seconds = 0; undoStack.length = 0;
+      stopTimer(); startTimer(); render(); updateStats();
+    }
+
+    function startTimer(){
+      stopTimer();
+      timerInterval = setInterval(()=>{seconds++; updateStats();},1000);
+    }
+    function stopTimer(){ if(timerInterval) clearInterval(timerInterval); timerInterval=null; }
+
+    function updateStats(){
+      movesEl.textContent = moves;
+      timerEl.textContent = formatTime(seconds);
+    }
+    function formatTime(s){
+      const m = Math.floor(s/60).toString().padStart(2,'0');
+      const sec = (s%60).toString().padStart(2,'0');
+      return `${m}:${sec}`;
+    }
+
+    function render(){
+      board.innerHTML = '';
+      tubes.forEach((tube,idx)=>{
+        const tubeEl = document.createElement('div');
+        tubeEl.className = 'tube';
+        tubeEl.dataset.index = idx;
+        if(selected===idx) tubeEl.classList.add('selected');
+
+        const inner = document.createElement('div');
+        inner.className='tube-inner';
+
+        // fill empty slots with placeholders so heights match
+        const filledSlots = tube.length;
+        for(let i=0;i<TUBE_CAPACITY;i++){
+          const slot = document.createElement('div');
+          slot.className='slot';
+          if(i < filledSlots){
+            const colorIndex = i; // bottom-to-top mapping
+            const color = tube[i];
+            const colorEl = document.createElement('div');
+            colorEl.className='color';
+            colorEl.style.background = color;
+            colorEl.title = color;
+            slot.appendChild(colorEl);
+          }
+          inner.appendChild(slot);
+        }
+
+        tubeEl.appendChild(inner);
+        board.appendChild(tubeEl);
+
+        tubeEl.addEventListener('click', ()=>onTubeClick(idx));
+      });
+
+      checkWin();
+    }
+
+    function onTubeClick(idx){
+      // If nothing selected, select non-empty tube as source
+      if(selected === null){
+        if(tubes[idx].length === 0) return; // can't select empty as source
+        selected = idx; render();
+        return;
+      }
+
+      // If clicking same tube -> deselect
+      if(selected === idx){ selected = null; render(); return; }
+
+      // Attempt move from selected -> idx
+      if(canMove(selected, idx)){
+        pushUndo();
+        performMove(selected, idx);
+        moves++; updateStats();
+        selected = null; render();
+      } else {
+        // If selected is filled and click a different filled tube, switch selection
+        if(tubes[idx].length>0){ selected = idx; render(); }
+      }
+    }
+
+    function topColor(tubeIdx){
+      const t = tubes[tubeIdx];
+      return t.length? t[t.length-1] : null;
+    }
+
+    function canMove(src, dest){
+      if(src===dest) return false;
+      const s = tubes[src];
+      const d = tubes[dest];
+      if(s.length===0) return false;
+      if(d.length===TUBE_CAPACITY) return false;
+      const color = s[s.length-1];
+      if(d.length===0) return true;
+      return d[d.length-1] === color;
+    }
+
+    function performMove(src, dest){
+      const s = tubes[src];
+      const d = tubes[dest];
+      if(!canMove(src,dest)) return;
+      const color = s[s.length-1];
+      // count how many same-colored units at top of source
+      let count = 0;
+      for(let i=s.length-1;i>=0;i--){ if(s[i]===color) count++; else break; }
+      // how many can we pour into dest
+      const space = TUBE_CAPACITY - d.length;
+      const toMove = Math.min(count, space);
+      // actually move
+      for(let i=0;i<toMove;i++){
+        d.push(s.pop());
+      }
+    }
+
+    // Undo
+    undoBtn.addEventListener('click', ()=>{
+      if(undoStack.length===0) return;
+      const st = undoStack.pop();
+      tubes = st.tubes.map(t=>t.slice());
+      moves = st.moves; seconds = st.seconds; selected = null; render(); updateStats();
+    });
+
+    // Restart
+    restartBtn.addEventListener('click', ()=>{
+      if(confirm('Restart level?')){
+        init(initialLevel);
+      }
+    });
+
+    // Hint: find first valid move and briefly highlight
+    hintBtn.addEventListener('click', ()=>{
+      const hint = findHint();
+      if(!hint){ alert('No valid moves (or puzzle solved)'); return; }
+      const [s,d] = hint;
+      // show a quick animated hint: select source then dest
+      selected = s; render();
+      setTimeout(()=>{ selected = d; render(); },600);
+      setTimeout(()=>{ selected = null; render(); },1200);
+    });
+
+    function findHint(){
+      for(let i=0;i<tubes.length;i++){
+        for(let j=0;j<tubes.length;j++){
+          if(canMove(i,j)) return [i,j];
+        }
+      }
+      return null;
+    }
+
+    function checkWin(){
+      // win when each non-empty tube is filled with same color (or empty)
+      const ok = tubes.every(t=> t.length===0 || (t.length===TUBE_CAPACITY && t.every(c=>c===t[0])));
+      if(ok){
+        stopTimer();
+        setTimeout(()=> alert(`Congratulations! You solved it in ${moves} moves and ${formatTime(seconds)}.`), 200);
+      }
+      return ok;
+    }
+
+    // Utility: shuffle helper (not used but handy)
+    function shuffleArray(a){
+      for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] }
+    }
+
+    // Initialize
+    init(initialLevel);
+
+    // Expose for debugging in console (optional)
+    window._game = {tubes,performMove,canMove,init};
+  </script></body>
+</html>
